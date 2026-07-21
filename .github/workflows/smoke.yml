@@ -1,0 +1,43 @@
+name: Smoke
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Create smoke schema source
+        run: |
+          mkdir -p "$RUNNER_TEMP/ptah-action-models"
+          cat > "$RUNNER_TEMP/ptah-action-models/models.go" <<'GO'
+          package models
+
+          //migrator:schema:table name="users"
+          type User struct {
+              //migrator:schema:field name="id" type="INTEGER" primary="true"
+              ID int
+
+              //migrator:schema:field name="email" type="TEXT" not_null="true" unique="true"
+              Email string
+          }
+          GO
+
+      - name: Run local action
+        uses: ./
+        with:
+          dir: ${{ runner.temp }}/ptah-action-models
+          db-url: sqlite:///${{ runner.temp }}/ptah-action.db
+          dialect: sqlite
+          migration-dir: migrations
+          comment: "false"
+          lint: "false"
