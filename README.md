@@ -13,7 +13,7 @@ permissions:
   checks: write
   contents: read
   issues: write
-  pull-requests: read
+  pull-requests: write
 
 jobs:
   ptah:
@@ -54,7 +54,9 @@ jobs:
 | --- | --- |
 | `plan-path` | Text migration plan report. |
 | `safety-path` | JSON safety report. |
+| `safety-error-path` | Text stderr captured from the safety report command. |
 | `lint-path` | JSON lint report. |
+| `lint-error-path` | Text stderr captured from the lint command. |
 | `destructive` | `true`, `false`, or `unknown`. |
 
 ## Behavior
@@ -63,10 +65,11 @@ The action downloads the requested Ptah release binary by default. If a release
 asset is not available yet, it falls back to:
 
 ```bash
-go install github.com/stokaro/ptah/cmd/ptah@master
+GOPROXY=direct go install github.com/stokaro/ptah/cmd/ptah@master
 ```
 
-when `version` is `latest`. Use `binary-path` when a workflow builds Ptah from
+when `version` is `latest`. Direct module fetch avoids stale Go module proxy
+results for moving refs. Use `binary-path` when a workflow builds Ptah from
 source before invoking the action.
 
 The action runs:
