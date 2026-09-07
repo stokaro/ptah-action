@@ -56,6 +56,14 @@ inputs:
     description: Directory for generated action reports.
     required: false
     default: ""
+  generate:
+    description: Write the migration files the plan describes into migration-dir.
+    required: false
+    default: "false"
+  generate-name:
+    description: Name passed to ptah migrations generate. Empty lets Ptah name it.
+    required: false
+    default: ""
 outputs:
   plan-path:
     description: Path to the text migration plan report.
@@ -75,6 +83,15 @@ outputs:
   destructive:
     description: "true when the safety report contains destructive statements."
     value: ${{ steps.run.outputs.destructive }}
+  generate-exit-code:
+    description: Exit code of ptah migrations generate, or 0 when generate is off.
+    value: ${{ steps.run.outputs.generate-exit-code }}
+  generated-list-path:
+    description: Path to a file listing the migration files generate wrote, one per line.
+    value: ${{ steps.run.outputs.generated-list-path }}
+  generated-count:
+    description: How many migration files generate wrote.
+    value: ${{ steps.run.outputs.generated-count }}
 runs:
   using: composite
   steps:
@@ -109,6 +126,8 @@ runs:
         INPUT_LINT_FAIL_ON: ${{ inputs.lint-fail-on }}
         INPUT_ALLOW_DESTRUCTIVE: ${{ inputs.allow-destructive }}
         INPUT_OUTPUT_DIR: ${{ inputs.output-dir }}
+        INPUT_GENERATE: ${{ inputs.generate }}
+        INPUT_GENERATE_NAME: ${{ inputs.generate-name }}
         GITHUB_ACTION_PATH: ${{ github.action_path }}
       run: "$GITHUB_ACTION_PATH/run.sh"
 
@@ -125,6 +144,7 @@ runs:
         PTAH_SAFETY_EXIT_CODE: ${{ steps.run.outputs.safety-exit-code }}
         PTAH_LINT_EXIT_CODE: ${{ steps.run.outputs.lint-exit-code }}
         PTAH_DESTRUCTIVE: ${{ steps.run.outputs.destructive }}
+        PTAH_GENERATED_LIST_PATH: ${{ steps.run.outputs.generated-list-path }}
         PTAH_ACTION_PATH: ${{ github.action_path }}
       with:
         script: |

@@ -31,6 +31,30 @@ fi
 "$ptah_bin" "${safety_args[@]}" >"$safety_path" 2>"$safety_error_path"
 safety_status="$?"
 
+generate_status="0"
+generated_list_path="$output_dir/ptah-generated.txt"
+: >"$generated_list_path"
+if [[ "${INPUT_GENERATE:-false}" == "true" ]]; then
+	migration_dir="${INPUT_MIGRATION_DIR:-migrations}"
+	mkdir -p "$migration_dir"
+	# The directory is compared before and after rather than parsing the
+	# command's prose: the file names carry a timestamp the caller cannot
+	# predict, and a message format is a worse contract than the filesystem.
+	before="$(mktemp)"
+	after="$(mktemp)"
+	find "$migration_dir" -type f -name '*.sql' | LC_ALL=C sort >"$before"
+	generate_args=(migrations generate --root-dir "${INPUT_DIR:-.}" \
+		--db-url "$INPUT_DB_URL" --migrations-dir "$migration_dir")
+	if [[ -n "${INPUT_GENERATE_NAME:-}" ]]; then
+		generate_args+=(--name "$INPUT_GENERATE_NAME")
+	fi
+	"$ptah_bin" "${generate_args[@]}" >"$output_dir/ptah-generate.txt" 2>&1
+	generate_status="$?"
+	find "$migration_dir" -type f -name '*.sql' | LC_ALL=C sort >"$after"
+	comm -13 "$before" "$after" >"$generated_list_path"
+	rm -f "$before" "$after"
+fi
+
 lint_status="0"
 if [[ "${INPUT_LINT:-true}" == "true" ]]; then
 	lint_args=(migrations lint --dir "${INPUT_MIGRATION_DIR:-migrations}" --format json --fail-on "${INPUT_LINT_FAIL_ON:-error}")
@@ -67,6 +91,9 @@ NODE
 	printf 'safety-exit-code=%s\n' "$safety_status"
 	printf 'lint-exit-code=%s\n' "$lint_status"
 	printf 'destructive=%s\n' "$destructive"
+	printf 'generate-exit-code=%s\n' "$generate_status"
+	printf 'generated-list-path=%s\n' "$generated_list_path"
+	printf 'generated-count=%s\n' "$(wc -l <"$generated_list_path" | tr -d ' ')"
 } >>"$GITHUB_OUTPUT"
 
 if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
@@ -77,5 +104,9 @@ if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
 		printf '| Plan | exit %s |\n' "$plan_status"
 		printf '| Safety | exit %s, destructive: %s |\n' "$safety_status" "$destructive"
 		printf '| Lint | exit %s |\n' "$lint_status"
+		if [[ "${INPUT_GENERATE:-false}" == "true" ]]; then
+			printf '| Generate | exit %s, %s file(s) |\n' \
+				"$generate_status" "$(wc -l <"$generated_list_path" | tr -d ' ')"
+		fi
 	} >>"$GITHUB_STEP_SUMMARY"
 fi

@@ -47,6 +47,8 @@ jobs:
 | `lint-fail-on` | `error` | Lint failure threshold: `error`, `any`, or `none`. |
 | `allow-destructive` | `false` | Allows destructive plans after review. |
 | `output-dir` | temporary | Directory for generated reports. |
+| `generate` | `false` | Write the migration files the plan describes into `migration-dir`. |
+| `generate-name` | empty | Name passed to `ptah migrations generate`. Empty lets Ptah name it. |
 
 ## Outputs
 
@@ -56,6 +58,9 @@ jobs:
 | `safety-path` | JSON safety report. |
 | `safety-error-path` | Text stderr captured from the safety report command. |
 | `lint-path` | JSON lint report. |
+| `generate-exit-code` | Exit code of `ptah migrations generate`, or `0` when `generate` is off. |
+| `generated-list-path` | File listing the migration files generation wrote, one per line. |
+| `generated-count` | How many migration files generation wrote. |
 | `lint-error-path` | Text stderr captured from the lint command. |
 | `destructive` | `true`, `false`, or `unknown`. |
 
@@ -89,3 +94,52 @@ the destructive-change failure gate and Check Run.
 This repository packages the composite action source maintained in
 [`stokaro/ptah`](https://github.com/stokaro/ptah) under
 `.github/actions/ptah`.
+
+## Generating the migration
+
+With `generate: true` the Action runs `ptah migrations generate` into
+`migration-dir` and lists the files in the sticky comment, with their SQL, so a
+reviewer reads what would be committed rather than a plan of it. It is off by
+default: a job that only reviews should not write files.
+
+The files are written into the workspace and **not committed**. What happens to
+them is the workflow's decision, because the two answers have different
+requirements:
+
+```yaml
+      - uses: stokaro/ptah-action@v1
+        id: ptah
+        with:
+          dir: ./internal/models
+          db-url: ${{ secrets.PTAH_DATABASE_URL }}
+          generate: "true"
+
+      # Commit them to the contributor's branch. Needs `contents: write`, and
+      # does nothing useful on a pull request from a fork, where the token has
+      # no write access to the head repository.
+      - if: steps.ptah.outputs.generated-count != '0'
+        run: |
+          git add $(cat "${{ steps.ptah.outputs.generated-list-path }}")
+          git -c user.name=ptah -c user.email=ptah@users.noreply.github.com \
+            commit -m "chore: generate migration"
+          git push
+```
+
+The alternative is to leave them uncommitted and let the author take the SQL
+from the comment. That needs no write scope and works on forks, at the cost of
+a manual step.
+
+### The line generation must stay behind
+
+`ptah migrations rebase` refuses a migration the target database has already
+applied. That check reads one database, and **unapplied is not unpublished**: a
+migration already pushed to an OCI registry lives in an immutable artifact, so
+renumbering the local files produces a directory whose migration identities
+disagree with an artifact someone may already be deploying. Re-hashing and
+`--verify-sum` do not catch it, because the renumbered directory does agree
+with its own integrity file.
+
+Nothing refuses a rebase because a version was published. So generation belongs
+before the publication step, and an automation that renumbers has to know where
+that line is -- in practice, that a version is published once its branch merged
+and the publish job ran.
