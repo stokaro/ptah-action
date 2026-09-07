@@ -1,3 +1,9 @@
+<!--
+This file is published to stokaro/ptah-action from stokaro/ptah. Edit it at
+.github/actions/ptah/README.md in that repository; a change made in the
+published copy is overwritten by the next publish.
+-->
+
 # Ptah Action
 
 Run Ptah migration planning, safety checks, lint, sticky pull request comments,
