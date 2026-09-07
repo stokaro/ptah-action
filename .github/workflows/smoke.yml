@@ -32,7 +32,7 @@ jobs:
           }
           GO
 
-      - name: Run local action
+      - name: Run local action against a Go source
         uses: ./
         with:
           dir: ${{ runner.temp }}/ptah-action-models
@@ -41,3 +41,55 @@ jobs:
           migration-dir: migrations
           comment: "false"
           lint: "false"
+
+      # A static file source must need no Go toolchain and must not scan the
+      # working directory. setup-go is off here on purpose: if the action still
+      # depended on Go for a SQL source, this step would fail.
+      - name: Create a SQL source and an external loader
+        run: |
+          cat > "$RUNNER_TEMP/ptah-action.sql" <<'SQL'
+          CREATE TABLE users (id INTEGER PRIMARY KEY);
+          SQL
+          cat > "$RUNNER_TEMP/ptah-action-loader.sh" <<'SH'
+          #!/bin/sh
+          echo 'CREATE TABLE users (id INTEGER PRIMARY KEY);'
+          SH
+          chmod +x "$RUNNER_TEMP/ptah-action-loader.sh"
+
+      - name: Run local action against a SQL file
+        uses: ./
+        with:
+          schema-file: ${{ runner.temp }}/ptah-action.sql
+          db-url: sqlite:///${{ runner.temp }}/ptah-action-sql.db
+          dialect: sqlite
+          setup-go: "false"
+          comment: "false"
+          lint: "false"
+
+      - name: Run local action against an external loader
+        uses: ./
+        with:
+          schema-cmd: ${{ runner.temp }}/ptah-action-loader.sh
+          schema-format: sql
+          db-url: sqlite:///${{ runner.temp }}/ptah-action-cmd.db
+          dialect: sqlite
+          setup-go: "false"
+          comment: "false"
+          lint: "false"
+
+      # An input combination Ptah cannot act on has to fail before Ptah runs,
+      # not produce a run whose source nobody chose.
+      - name: A format with no command is refused
+        run: |
+          set +e
+          INPUT_DB_URL="sqlite:///$RUNNER_TEMP/ptah-action-bad.db" \
+          INPUT_SCHEMA_FORMAT=sql \
+          PTAH_BIN=/bin/true \
+          ./run.sh >/dev/null 2>"$RUNNER_TEMP/refusal.txt"
+          status="$?"
+          set -e
+          if [ "$status" != "2" ]; then
+            echo "expected exit 2, got $status"
+            exit 1
+          fi
+          grep -q "schema-format selects the output format of schema-cmd" "$RUNNER_TEMP/refusal.txt"

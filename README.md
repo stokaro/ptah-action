@@ -37,7 +37,10 @@ jobs:
 | `binary-path` | empty | Existing Ptah binary path. Skips release download. |
 | `setup-go` | `true` | Set up the Go toolchain before running Ptah. |
 | `go-version` | `1.26.5` | Go version passed to `actions/setup-go`. |
-| `dir` | `.` | Root directory scanned for Go schema entities. |
+| `dir` | empty | Root directories scanned for Go schema entities, one per line. |
+| `schema-file` | empty | SQL, YAML, HCL, DBML, or `oci://` sources, one per line. |
+| `schema-cmd` | empty | External program whose standard output is the desired schema. |
+| `schema-format` | empty | Format of the `schema-cmd` output: `sql`, `hcl`, or `yaml`. |
 | `db-url` | required | Target database URL used to read the current schema. |
 | `dialect` | empty | Dialect passed to `ptah migrations lint`. |
 | `migration-dir` | `migrations` | Migration directory passed to lint. |
@@ -143,3 +146,47 @@ Nothing refuses a rebase because a version was published. So generation belongs
 before the publication step, and an automation that renumbers has to know where
 that line is -- in practice, that a version is published once its branch merged
 and the publish job ran.
+
+## Choosing the desired schema
+
+The Action forwards the source to Ptah rather than reinterpreting it. Each
+input maps to the flag Ptah already has, so anything Ptah accepts works here:
+
+```yaml
+      # Go annotations, as before
+      - uses: stokaro/ptah-action@v1
+        with:
+          dir: ./internal/models
+          db-url: ${{ secrets.PTAH_DATABASE_URL }}
+
+      # A SQL, YAML, HCL, DBML, or OCI source. No Go toolchain is installed.
+      - uses: stokaro/ptah-action@v1
+        with:
+          schema-file: ./schema.sql
+          db-url: ${{ secrets.PTAH_DATABASE_URL }}
+
+      # An external program that prints the schema
+      - uses: stokaro/ptah-action@v1
+        with:
+          schema-cmd: go run ./loader
+          schema-format: sql
+          db-url: ${{ secrets.PTAH_DATABASE_URL }}
+```
+
+`dir` and `schema-file` take one value per line and compose, the way repeating
+`--root-dir` and `--schema-file` composes on the command line.
+
+### Two behaviours worth knowing
+
+**`dir` no longer defaults to `.`** A run that selected a SQL file used to scan
+the working directory for Go entities as well, and silently composed a schema
+nobody asked for. Selecting nothing at all still falls back to `--root-dir .`,
+so an existing workflow is unaffected.
+
+**Go is installed only when a Go source is selected.** `setup-go` still
+decides, but a run whose schema is a SQL file installs no toolchain even with
+the default `setup-go: true`.
+
+**A `schema-format` with no `schema-cmd` fails with exit 2** before Ptah runs.
+The format describes the output of a command that is not there, and running
+anyway would silently ignore the input.

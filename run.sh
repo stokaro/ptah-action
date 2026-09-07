@@ -15,7 +15,44 @@ safety_error_path="$output_dir/ptah-safety.stderr.txt"
 lint_path="$output_dir/ptah-lint.json"
 lint_error_path="$output_dir/ptah-lint.stderr.txt"
 
-common_args=(migrations plan --root-dir "${INPUT_DIR:-.}" --db-url "${INPUT_DB_URL:?db-url input is required}")
+# The desired schema is forwarded, never reinterpreted: each selector maps to
+# the flag Ptah already has, and Ptah decides what a source means.
+#
+# `dir` used to default to `.`, so a run selecting a SQL file still scanned the
+# working directory for Go entities and silently composed a schema nobody asked
+# for. It defaults to empty now, and the fallback below keeps the old behaviour
+# for a run that selects nothing at all.
+read_lines() {
+	printf '%s\n' "$1" | while IFS= read -r line; do
+		line="${line#"${line%%[![:space:]]*}"}"
+		line="${line%"${line##*[![:space:]]}"}"
+		[[ -n "$line" ]] && printf '%s\n' "$line"
+	done
+}
+
+if [[ -n "${INPUT_SCHEMA_FORMAT:-}" && -z "${INPUT_SCHEMA_CMD:-}" ]]; then
+	echo "schema-format selects the output format of schema-cmd, which is not set" >&2
+	exit 2
+fi
+
+source_args=()
+while IFS= read -r root; do
+	source_args+=(--root-dir "$root")
+done < <(read_lines "${INPUT_DIR:-}")
+while IFS= read -r file; do
+	source_args+=(--schema-file "$file")
+done < <(read_lines "${INPUT_SCHEMA_FILE:-}")
+if [[ -n "${INPUT_SCHEMA_CMD:-}" ]]; then
+	source_args+=(--schema-cmd "$INPUT_SCHEMA_CMD")
+	if [[ -n "${INPUT_SCHEMA_FORMAT:-}" ]]; then
+		source_args+=(--schema-format "$INPUT_SCHEMA_FORMAT")
+	fi
+fi
+if [[ "${#source_args[@]}" -eq 0 ]]; then
+	source_args=(--root-dir .)
+fi
+
+common_args=(migrations plan "${source_args[@]}" --db-url "${INPUT_DB_URL:?db-url input is required}")
 if [[ -n "${INPUT_SCHEMAS:-}" ]]; then
 	common_args+=(--schemas "$INPUT_SCHEMAS")
 fi
@@ -43,7 +80,7 @@ if [[ "${INPUT_GENERATE:-false}" == "true" ]]; then
 	before="$(mktemp)"
 	after="$(mktemp)"
 	find "$migration_dir" -type f -name '*.sql' | LC_ALL=C sort >"$before"
-	generate_args=(migrations generate --root-dir "${INPUT_DIR:-.}" \
+	generate_args=(migrations generate "${source_args[@]}" \
 		--db-url "$INPUT_DB_URL" --migrations-dir "$migration_dir")
 	if [[ -n "${INPUT_GENERATE_NAME:-}" ]]; then
 		generate_args+=(--name "$INPUT_GENERATE_NAME")
