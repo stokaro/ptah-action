@@ -5,9 +5,23 @@ This repository is a published copy. The action's single source is
 in [`stokaro/ptah`](https://github.com/stokaro/ptah), and a workflow there
 mirrors the directory here on every change.
 
-So a pull request against this repository is overwritten by the next publish,
-however good it is. Open it against `stokaro/ptah` instead, editing the files
-under `.github/actions/ptah`. `scripts/check-action-publishable.sh` runs on
-that pull request and refuses a change that could not be published.
+Changes to action files, including `AGENTS.md`, belong in `stokaro/ptah`
+under `.github/actions/ptah`. Direct edits to those files in this repository
+are overwritten by the next publication. `scripts/check-action-publishable.sh`
+runs on the source pull request and checks that the action can be published.
+
+The `.github/` directory and this `CONTRIBUTING.md` are maintained here and
+preserved by the publication workflow. Changes to the PR template or smoke
+workflow belong in this repository.
+
+## PRs and issues
+
+Follow [PR and issue writing](AGENTS.md#pr-and-issue-writing) for clear titles
+and short introductions in plain English.
+
+Use the [PR template](.github/pull_request_template.md) and follow
+[Pull request descriptions](AGENTS.md#pull-request-descriptions).
+Explain the affected workflow, resulting behavior, risks, and observed
+verification. Link a required source change when the PR depends on one.
 
 Issues are welcome here.
